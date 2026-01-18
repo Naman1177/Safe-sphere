@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mining Helmet Digital Twin - Safety Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            color: #1e293b;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* Danger Overlay */
+        .danger-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(220, 38, 38, 0.4);
+            z-index: 9999;
+            display: none;
+            pointer-events: none;
+        }
+
+        .danger-overlay.active {
+            display: block;
+            animation: dangerBlink 0.5s ease-in-out infinite;
+        }
+
+        @keyframes dangerBlink {
+            0%, 100% { opacity: 0; }
+            50% { opacity: 1; }
+        }
+
+        .danger-sign {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10000;
+            display: none;
+            text-align: center;
+        }
+
+        .danger-sign.active {
+            display: block;
+            animation: dangerPulse 0.5s ease-in-out infinite;
+        }
+
+        @keyframes dangerPulse {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); }
+            50% { transform: translate(-50%, -50%) scale(1.1); }
+        }
+
+        .danger-sign-icon {
+            font-size: 10em;
+            filter: drop-shadow(0 0 30px rgba(239, 68, 68, 1));
+        }
+
+        .danger-sign-text {
+            font-size: 4em;
+            font-weight: 900;
+            color: #fff;
+            text-shadow: 0 0 40px rgba(239, 68, 68, 1), 0 0 20px rgba(239, 68, 68, 1);
+            margin-top: 20px;
+            letter-spacing: 5px;
+        }
+
+        .container {
+            max-width: 1920px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            border-bottom: 3px solid #f59e0b;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 20px rgba(245, 158, 11, 0.2);
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            color: #f59e0b;
+            text-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);
+            margin-bottom: 10px;
+        }
+
+        .header .subtitle {
+            color: #64748b;
+            font-size: 1.1em;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #cbd5e1;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+        }
+
+        .card-title {
+            font-size: 1.3em;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #f59e0b;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 10px;
+        }
+
+        #viewer-container {
+            grid-column: 1 / -1;
+            height: 500px;
+            background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%);
+            border-radius: 12px;
+            border: 2px solid #cbd5e1;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Danger Meter Styles */
+        .danger-meter-card {
+            grid-column: 1 / -1;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(241, 245, 249, 0.98));
+            border: 2px solid #cbd5e1;
+        }
+
+        .danger-meter-container {
+            position: relative;
+            height: 60px;
+            background: #f1f5f9;
+            border-radius: 30px;
+            overflow: hidden;
+            border: 2px solid #cbd5e1;
+            margin: 20px 0;
+        }
+
+        .danger-meter-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #10b981 0%, #f59e0b 40%, #ef4444 70%, #dc2626 100%);
+            transition: width 0.5s ease;
+            position: relative;
+            border-radius: 30px;
+        }
+
+        .danger-meter-fill.critical {
+            animation: criticalPulse 0.5s ease-in-out infinite;
+        }
+
+        @keyframes criticalPulse {
+            0%, 100% { filter: brightness(1); }
+            50% { filter: brightness(1.5); }
+        }
+
+        .danger-meter-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+            font-size: 0.9em;
+            color: #64748b;
+        }
+
+        .danger-level-text {
+            text-align: center;
+            font-size: 2.5em;
+            font-weight: 700;
+            margin: 20px 0;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+
+        .danger-level-safe { color: #10b981; text-shadow: 0 2px 8px rgba(16, 185, 129, 0.3); }
+        .danger-level-caution { color: #f59e0b; text-shadow: 0 2px 8px rgba(245, 158, 11, 0.3); }
+        .danger-level-warning { color: #fb923c; text-shadow: 0 2px 8px rgba(251, 146, 60, 0.3); }
+        .danger-level-danger { color: #ef4444; text-shadow: 0 2px 8px rgba(239, 68, 68, 0.3); }
+        .danger-level-critical { 
+            color: #dc2626; 
+            text-shadow: 0 2px 12px rgba(220, 38, 38, 0.5);
+            animation: criticalText 0.5s ease-in-out infinite;
+        }
+
+        @keyframes criticalText {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .gas-readings {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .gas-reading-item {
+            background: #f1f5f9;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid #cbd5e1;
+        }
+
+        .gas-reading-label {
+            color: #64748b;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+
+        .gas-reading-value {
+            font-size: 1.8em;
+            font-weight: 700;
+            color: #f59e0b;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .status-worn {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.5);
+        }
+
+        .status-removed {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
+            animation: pulse 1s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .sensor-value {
+            font-size: 2.5em;
+            font-weight: 700;
+            color: #f59e0b;
+            margin: 10px 0;
+            text-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+        }
+
+        .sensor-label {
+            color: #64748b;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .fire-alarm {
+            position: relative;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .fire-alarm.active {
+            background: linear-gradient(135deg, rgba(220, 38, 38, 0.15), rgba(239, 68, 68, 0.15));
+            border: 2px solid #ef4444;
+        }
+
+        .flame-animation {
+            font-size: 4em;
+            margin: 20px 0;
+            animation: flicker 0.2s ease-in-out infinite;
+        }
+
+        @keyframes flicker {
+            0%, 100% { opacity: 1; transform: scale(1) translateY(0); }
+            25% { opacity: 0.8; transform: scale(1.1) translateY(-5px); }
+            50% { opacity: 0.9; transform: scale(0.95) translateY(2px); }
+            75% { opacity: 0.85; transform: scale(1.05) translateY(-3px); }
+        }
+
+        .danger-text {
+            font-size: 2em;
+            font-weight: 700;
+            color: #ef4444;
+            text-shadow: 0 0 20px rgba(239, 68, 68, 0.8);
+            animation: pulse 0.5s ease-in-out infinite;
+        }
+
+        .chart-container {
+            height: 250px;
+            position: relative;
+        }
+
+        .motion-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 15px;
+            background: #f1f5f9;
+            border-radius: 8px;
+            margin-top: 10px;
+            border: 1px solid #cbd5e1;
+        }
+
+        .motion-icon {
+            font-size: 2em;
+        }
+
+        .motion-text {
+            font-size: 1.2em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .temp-hum-display {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+        }
+
+        .temp-hum-item {
+            text-align: center;
+        }
+
+        .alert-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(135deg, #dc2626, #ef4444);
+            color: white;
+            padding: 15px;
+            text-align: center;
+            font-size: 1.3em;
+            font-weight: 700;
+            z-index: 1000;
+            box-shadow: 0 4px 20px rgba(220, 38, 38, 0.5);
+            transform: translateY(-100%);
+            transition: transform 0.3s ease;
+        }
+
+        .alert-banner.active {
+            transform: translateY(0);
+        }
+
+        .connection-status {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid #cbd5e1;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            z-index: 999;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #10b981;
+            animation: statusPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes statusPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .status-dot.error {
+            background: #ef4444;
+        }
+
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            #viewer-container {
+                height: 350px;
+            }
+
+            .gas-readings {
+                grid-template-columns: 1fr;
+            }
+
+            .danger-sign-icon {
+                font-size: 6em;
+            }
+
+            .danger-sign-text {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Danger Overlay -->
+    <div class="danger-overlay" id="dangerOverlay"></div>
+    
+    <!-- Danger Sign -->
+    <div class="danger-sign" id="dangerSign">
+        <div class="danger-sign-icon">⚠️</div>
+        <div class="danger-sign-text">DANGER!</div>
+    </div>
+
+    <div class="alert-banner" id="freefallAlert">
+        ⚠️ CRITICAL: FREE FALL DETECTED! EMERGENCY RESPONSE REQUIRED ⚠️
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <h1>SAFE SPHERE</h1>
+            <p class="subtitle">Real-Time Safety Monitoring System</p>
+        </div>
+
+        <div class="grid">
+            <!-- Danger Meter -->
+            <div class="card danger-meter-card">
+                <div class="card-title">☢️ Danger Level Monitor</div>
+                <div class="danger-level-text" id="dangerLevelText">SAFE</div>
+                <div class="danger-meter-container">
+                    <div class="danger-meter-fill" id="dangerMeterFill" style="width: 0%"></div>
+                </div>
+                <div class="danger-meter-labels">
+                    <span>Safe (0%)</span>
+                    <span>Caution (25%)</span>
+                    <span>Warning (50%)</span>
+                    <span>Danger (75%)</span>
+                    <span>Critical (100%)</span>
+                </div>
+                <div class="gas-readings">
+                    <div class="gas-reading-item">
+                        <div class="gas-reading-label">CH4 Level</div>
+                        <div class="gas-reading-value" id="ch4Reading">0</div>
+                    </div>
+                    <div class="gas-reading-item">
+                        <div class="gas-reading-label">CO Level</div>
+                        <div class="gas-reading-value" id="coReading">0</div>
+                    </div>
+                    <div class="gas-reading-item">
+                        <div class="gas-reading-label">LPG/Smoke</div>
+                        <div class="gas-reading-value" id="smokeReading">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3D Viewer -->
+            <div id="viewer-container">
+                <canvas id="threeCanvas"></canvas>
+            </div>
+
+            <!-- Helmet Status -->
+            <div class="card">
+                <div class="card-title">Helmet Status</div>
+                <div style="text-align: center; padding: 20px;">
+                    <span class="status-badge" id="helmetStatus">Checking...</span>
+                </div>
+                <div class="motion-indicator">
+                    <span class="motion-icon" id="motionIcon">🚶</span>
+                    <span class="motion-text" id="motionText">RESTING</span>
+                </div>
+            </div>
+
+            <!-- Fire Alarm -->
+            <div class="card fire-alarm" id="fireAlarm">
+                <div class="card-title">🔥 Fire Detection</div>
+                <div class="flame-animation" id="flameIcon" style="display: none;">🔥</div>
+                <div class="danger-text" id="dangerText" style="display: none;">DANGER!</div>
+                <div class="sensor-label">Flame Sensor</div>
+                <div class="sensor-value" id="flameValue">--</div>
+            </div>
+
+            <!-- Temperature & Humidity -->
+            <div class="card">
+                <div class="card-title">🌡️ Environmental Conditions</div>
+                <div class="temp-hum-display">
+                    <div class="temp-hum-item">
+                        <div class="sensor-label">Temperature</div>
+                        <div class="sensor-value" id="tempValue">--°C</div>
+                    </div>
+                    <div class="temp-hum-item">
+                        <div class="sensor-label">Humidity</div>
+                        <div class="sensor-value" id="humValue">--%</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pressure & Height -->
+            <div class="card">
+                <div class="card-title">📊 Atmospheric Data</div>
+                <div class="temp-hum-display">
+                    <div class="temp-hum-item">
+                        <div class="sensor-label">Pressure</div>
+                        <div class="sensor-value" id="pressureValue">-- hPa</div>
+                    </div>
+                    <div class="temp-hum-item">
+                        <div class="sensor-label">Altitude</div>
+                        <div class="sensor-value" id="heightValue">-- m</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Methane Graph -->
+            <div class="card">
+                <div class="card-title">💨 Methane (CH4) Level</div>
+                <div class="chart-container">
+                    <canvas id="ch4Chart"></canvas>
+                </div>
+            </div>
+
+            <!-- Carbon Monoxide Graph -->
+            <div class="card">
+                <div class="card-title">☠️ Carbon Monoxide (CO) Level</div>
+                <div class="chart-container">
+                    <canvas id="coChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Ammonia Graph -->
+            <div class="card">
+                <div class="card-title">⚗️ Ammonia (NH3) Level</div>
+                <div class="chart-container">
+                    <canvas id="nh3Chart"></canvas>
+                </div>
+            </div>
+
+            <!-- Smoke/LPG Graph -->
+            <div class="card">
+                <div class="card-title">🌫️ Smoke/LPG Level</div>
+                <div class="chart-container">
+                    <canvas id="smokeChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Oxygen Graph -->
+            <div class="card">
+                <div class="card-title">💨 Oxygen (O2) Level</div>
+                <div class="chart-container">
+                    <canvas id="oxygenChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="connection-status">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">Connected</span>
+    </div>
+
+    <script>
+        // Three.js Setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / 500, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ 
+            canvas: document.getElementById('threeCanvas'),
+            antialias: true,
+            alpha: true
+        });
+        
+        const container = document.getElementById('viewer-container');
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.setClearColor(0xf8fafc, 1);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(5, 10, 7);
+        scene.add(directionalLight);
+
+        const pointLight = new THREE.PointLight(0xf59e0b, 1, 100);
+        pointLight.position.set(0, 5, 5);
+        scene.add(pointLight);
+
+        camera.position.z = 3;
+        camera.position.y = 1;
+
+        let minerModel = null;
+        let currentMotionState = 'resting';
+        let animationTime = 0;
+        let currentModelFile = '';
+
+        // ========================================
+        // 🎯 CHANGE YOUR GLB FILE NAMES HERE! 🎯
+        // ========================================
+        // Model file mapping
+        const modelFiles = {
+            'resting': 'Untitled1.glb',      // ← Change this to your resting model file name
+            'walking': 'Untitled1.glb',      // ← Change this to your walking model file name
+            'running': 'Untitled1.glb',      // ← Change this to your running model file name
+            'freefall': 'Untitled1.glb'      // ← Change this to your falling model file name
+        };
+        // ========================================
+
+        // Load GLTF Model
+        const loader = new THREE.GLTFLoader();
+
+        function loadModel(modelFile) {
+            if (currentModelFile === modelFile) return;
+            currentModelFile = modelFile;
+
+            // Remove existing model
+            if (minerModel) {
+                scene.remove(minerModel);
+                minerModel = null;
+            }
+
+            loader.load(modelFile, 
+                (gltf) => {
+                    minerModel = gltf.scene;
+                    minerModel.scale.set(1, 1, 1);
+                    minerModel.position.set(0, -1, 0);
+                    scene.add(minerModel);
+                    console.log('Model loaded:', modelFile);
+                },
+                (xhr) => {
+                    console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+                },
+                (error) => {
+                    console.error('Error loading model:', error);
+                    // Create a fallback cube if model fails to load
+                    const geometry = new THREE.BoxGeometry(1, 1, 1);
+                    const material = new THREE.MeshPhongMaterial({ color: 0xf59e0b });
+                    minerModel = new THREE.Mesh(geometry, material);
+                    minerModel.position.set(0, 0, 0);
+                    scene.add(minerModel);
+                }
+            );
+        }
+
+        // Load initial model
+        loadModel(modelFiles['resting']);
+
+        // Chart.js Setup
+        const chartConfig = (label, color) => ({
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: label,
+                    data: [],
+                    borderColor: color,
+                    backgroundColor: color + '33',
+                    tension: 0.4,
+                    fill: true,
+                    pointRadius: 3,
+                    pointHoverRadius: 5
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { 
+                        display: true,
+                        labels: { color: '#1e293b' }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: '#e2e8f0' },
+                        ticks: { color: '#64748b' }
+                    },
+                    x: {
+                        grid: { color: '#e2e8f0' },
+                        ticks: { color: '#64748b' }
+                    }
+                }
+            }
+        });
+
+        const ch4Chart = new Chart(document.getElementById('ch4Chart').getContext('2d'), 
+            chartConfig('Methane (CH4)', '#f59e0b'));
+        const coChart = new Chart(document.getElementById('coChart').getContext('2d'), 
+            chartConfig('Carbon Monoxide (CO)', '#ef4444'));
+        const nh3Chart = new Chart(document.getElementById('nh3Chart').getContext('2d'), 
+            chartConfig('Ammonia (NH3)', '#8b5cf6'));
+        const smokeChart = new Chart(document.getElementById('smokeChart').getContext('2d'), 
+            chartConfig('Smoke/LPG', '#64748b'));
+        const oxygenChart = new Chart(document.getElementById('oxygenChart').getContext('2d'), 
+            chartConfig('Oxygen (O2)', '#3b82f6'));
+
+        // Data Management
+        const maxDataPoints = 20;
+
+        function updateChart(chart, value) {
+            const time = new Date().toLocaleTimeString();
+            
+            if (chart.data.labels.length >= maxDataPoints) {
+                chart.data.labels.shift();
+                chart.data.datasets[0].data.shift();
+            }
+            
+            chart.data.labels.push(time);
+            chart.data.datasets[0].data.push(value);
+            chart.update('none');
+        }
+
+        // Danger Level Calculation
+        function calculateDangerLevel(ch4, co, smoke) {
+            // Normalize values (adjust thresholds based on your sensors)
+            const ch4Danger = Math.min((ch4 / 1000) * 100, 100);
+            const coDanger = Math.min((co / 500) * 100, 100);
+            const smokeDanger = Math.min((smoke / 800) * 100, 100);
+            
+            // Weighted average (CO is most dangerous)
+            const dangerLevel = (ch4Danger * 0.3 + coDanger * 0.4 + smokeDanger * 0.3);
+            return Math.min(dangerLevel, 100);
+        }
+
+        function updateDangerMeter(dangerLevel, isFalling) {
+            const meterFill = document.getElementById('dangerMeterFill');
+            const dangerText = document.getElementById('dangerLevelText');
+            const dangerOverlay = document.getElementById('dangerOverlay');
+            const dangerSign = document.getElementById('dangerSign');
+            
+            meterFill.style.width = dangerLevel + '%';
+            
+            let levelText = 'SAFE';
+            let levelClass = 'danger-level-safe';
+            let showDanger = false;
+            
+            if (isFalling || dangerLevel >= 75) {
+                levelText = 'CRITICAL';
+                levelClass = 'danger-level-critical';
+                meterFill.classList.add('critical');
+                showDanger = true;
+            } else if (dangerLevel >= 60) {
+                levelText = 'DANGER';
+                levelClass = 'danger-level-danger';
+                meterFill.classList.remove('critical');
+                showDanger = true;
+            } else if (dangerLevel >= 40) {
+                levelText = 'WARNING';
+                levelClass = 'danger-level-warning';
+                meterFill.classList.remove('critical');
+            } else if (dangerLevel >= 20) {
+                levelText = 'CAUTION';
+                levelClass = 'danger-level-caution';
+                meterFill.classList.remove('critical');
+            } else {
+                levelText = 'SAFE';
+                levelClass = 'danger-level-safe';
+                meterFill.classList.remove('critical');
+            }
+            
+            dangerText.textContent = levelText;
+            dangerText.className = 'danger-level-text ' + levelClass;
+            
+            // Show/hide danger overlay
+            if (showDanger) {
+                dangerOverlay.classList.add('active');
+                dangerSign.classList.add('active');
+            } else {
+                dangerOverlay.classList.remove('active');
+                dangerSign.classList.remove('active');
+            }
+        }
+
+        // Animation Loop
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            if (minerModel) {
+                animationTime += 0.016;
+                
+                // Rotate model slowly
+                minerModel.rotation.y += 0.005;
+            }
+            
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Fetch and Update Data
+        let lastMotionState = 'resting';
+
+        async function fetchData() {
+            try {
+                const response = await fetch('latest.txt?' + new Date().getTime());
+                const text = await response.text();
+                const data = text.trim().split(',');
+                
+                if (data.length >= 14) {
+                    const [ch4, co, nh3, smoke, temp, hum, flame, worn, motion_state, accX, accY, accZ, pressure, height, oxygen] = data;
+                    
+                    // Parse gas values
+                    const ch4Val = parseFloat(ch4);
+                    const coVal = parseFloat(co);
+                    const smokeVal = parseFloat(smoke);
+                    
+                    // Update charts
+                    updateChart(ch4Chart, ch4Val);
+                    updateChart(coChart, coVal);
+                    updateChart(nh3Chart, parseFloat(nh3));
+                    updateChart(smokeChart, smokeVal);
+                    updateChart(oxygenChart, parseFloat(oxygen || 0));
+                    
+                    // Update gas readings
+                    document.getElementById('ch4Reading').textContent = ch4Val.toFixed(0);
+                    document.getElementById('coReading').textContent = coVal.toFixed(0);
+                    document.getElementById('smokeReading').textContent = smokeVal.toFixed(0);
+                    
+                    // Update environmental display
+                    document.getElementById('tempValue').textContent = parseFloat(temp).toFixed(1) + '°C';
+                    document.getElementById('humValue').textContent = parseFloat(hum).toFixed(1) + '%';
+                    
+                    // Update pressure and height
+                    document.getElementById('pressureValue').textContent = parseFloat(pressure || 0).toFixed(1) + ' hPa';
+                    document.getElementById('heightValue').textContent = parseFloat(height || 0).toFixed(1) + ' m';
+                    
+                    // Update flame sensor
+                    const flameValue = parseInt(flame);
+                    document.getElementById('flameValue').textContent = flameValue;
+                    const fireAlarm = document.getElementById('fireAlarm');
+                    
+                    if (flameValue < 500) {
+                        fireAlarm.classList.add('active');
+                        document.getElementById('flameIcon').style.display = 'block';
+                        document.getElementById('dangerText').style.display = 'block';
+                    } else {
+                        fireAlarm.classList.remove('active');
+                        document.getElementById('flameIcon').style.display = 'none';
+                        document.getElementById('dangerText').style.display = 'none';
+                    }
+                    
+                    // Update helmet status
+                    const isWorn = worn.trim().toLowerCase() === 'true' || worn.trim() === '1';
+                    const statusBadge = document.getElementById('helmetStatus');
+                    
+                    if (isWorn) {
+                        statusBadge.textContent = '✓ Helmet Weared';
+                        statusBadge.className = 'status-badge status-worn';
+                    } else {
+                        statusBadge.textContent = '✗ Helmet Removed';
+                        statusBadge.className = 'status-badge status-removed';
+                    }
+                    
+                    // Update motion state and load appropriate model
+                    const motionState = motion_state.trim().toLowerCase();
+                    currentMotionState = motionState;
+                    const motionIcon = document.getElementById('motionIcon');
+                    const motionText = document.getElementById('motionText');
+                    const freefallAlert = document.getElementById('freefallAlert');
+                    
+                    let modelToLoad = modelFiles['resting'];
+                    
+                    if (motionState === 'freefall') {
+                        motionIcon.textContent = '⚠️';
+                        motionText.textContent = 'FREE FALL!!!';
+                        motionText.style.color = '#ef4444';
+                        freefallAlert.classList.add('active');
+                        modelToLoad = modelFiles['freefall'];
+                    } else {
+                        motionText.style.color = '#1e293b';
+                        freefallAlert.classList.remove('active');
+                        
+                        if (motionState === 'walking') {
+                            motionIcon.textContent = '🚶';
+                            motionText.textContent = 'WALKING';
+                            modelToLoad = modelFiles['walking'];
+                        } else if (motionState === 'running') {
+                            motionIcon.textContent = '🏃';
+                            motionText.textContent = 'RUNNING';
+                            modelToLoad = modelFiles['running'];
+                        } else {
+                            motionIcon.textContent = '🧍';
+                            motionText.textContent = 'RESTING';
+                            modelToLoad = modelFiles['resting'];
+                        }
+                    }
+                    
+                    // Load appropriate model
+                    loadModel(modelToLoad);
+                    
+                    // Calculate and update danger level
+                    const dangerLevel = calculateDangerLevel(ch4Val, coVal, smokeVal);
+                    const isFalling = motionState === 'freefall';
+                    updateDangerMeter(dangerLevel, isFalling);
+                    
+                    lastMotionState = motionState;
+                    
+                    // Apply accelerometer tilt (subtle effect)
+                    if (minerModel && motionState !== 'freefall') {
+                        const ax = parseFloat(accX) / 10000;
+                        const ay = parseFloat(accY) / 10000;
+                        minerModel.rotation.z = ax * 0.3;
+                        minerModel.rotation.x = ay * 0.3;
+                    }
+                    
+                    // Update connection status
+                    document.getElementById('statusDot').className = 'status-dot';
+                    document.getElementById('statusText').textContent = 'Connected';
+                }
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                document.getElementById('statusDot').className = 'status-dot error';
+                document.getElementById('statusText').textContent = 'Connection Error';
+            }
+        }
+
+        // Start fetching data
+        fetchData();
+        setInterval(fetchData, 1000);
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            const container = document.getElementById('viewer-container');
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        });
+    </script>
+</body>
+</html>
